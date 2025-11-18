@@ -1,6 +1,30 @@
 # New file: model_adapters.py
 # Lightweight adapter layer to allow using different LLM backends (OpenAI, HF Inference API, local transformers, llama.cpp, Qwen, DeepSeek).
 # Designed to be called from pipelines (e.g. sparrow_parse) with a config dict or option string.
+"""
+Model Adapters for Sparrow LLM Engine
+
+This module provides a unified interface for different LLM backends, allowing easy integration
+with various AI model providers.
+
+Supported Adapters:
+    - OpenAI: OpenAI API (GPT-4, GPT-3.5, etc.)
+    - QwenAdapter: Alibaba Qwen (阿里千问) via DashScope API
+    - DeepSeekAdapter: DeepSeek API (deepseek-chat, deepseek-coder)
+    - HFInferenceAPIAdapter: Hugging Face Inference API
+    - HFLocalAdapter: Local Hugging Face transformers
+    - LlamaCppAdapter: Local llama.cpp models
+
+Usage:
+    # Using get_adapter with dict config
+    config = {"method": "qwen", "model_name": "qwen-plus", "qwen_api_key": "your-key"}
+    adapter = get_adapter(config)
+    result = adapter.generate("Your prompt here")
+    
+    # Using get_adapter with string format
+    adapter = get_adapter("qwen:qwen-plus")  # Requires DASHSCOPE_API_KEY in environment
+    result = adapter.generate("Your prompt here")
+"""
 import os
 import json
 from abc import ABC, abstractmethod
