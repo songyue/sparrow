@@ -22,6 +22,15 @@ from .sparrow_experimental import process_precision_data
 import concurrent.futures
 from pipelines.interface import Pipeline
 
+# Import model adapters for non-MLX backends
+import sys
+from pathlib import Path
+# Add parent directory to path to import model_adapters
+_llm_dir = Path(__file__).resolve().parent.parent.parent
+if str(_llm_dir) not in sys.path:
+    sys.path.insert(0, str(_llm_dir))
+from model_adapters import get_adapter
+
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -30,31 +39,54 @@ warnings.filterwarnings("ignore", category=UserWarning)
 def subprocess_inference(config, input_data, tables_only, crop_size, query_all_data, apply_annotation, precision_callback, debug_dir, debug):
     """
     Subprocess function to execute the inference logic.
+    Supports both traditional inference backends (MLX, Hugging Face, Ollama) 
+    and new adapter-based backends (OpenAI, HF API, HF Local, llama.cpp).
     """
-    from sparrow_parse.extractors.vllm_extractor import VLLMExtractor
-    from sparrow_parse.vllm.inference_factory import InferenceFactory
+    # Check if this is an adapter-based method
+    adapter_methods = ["openai", "hfapi", "hf_local", "llamacpp"]
+    method = config.get("method", "").lower()
+    
+    if method in adapter_methods:
+        # Use adapter-based inference for simple text-based queries
+        adapter = get_adapter(config)
+        
+        # Extract the text prompt from input_data
+        prompt = input_data[0].get("text_input", "")
+        
+        # Call the adapter's generate method
+        result = adapter.generate(prompt)
+        
+        # Extract the text from the result
+        llm_output_text = result.get("text", "")
+        
+        # Return as a list with a single item (matching the expected format)
+        return [llm_output_text], 1
+    else:
+        # Use traditional inference pipeline for MLX, Hugging Face spaces, Ollama
+        from sparrow_parse.extractors.vllm_extractor import VLLMExtractor
+        from sparrow_parse.vllm.inference_factory import InferenceFactory
 
-    # Initialize the extractor and inference instance
-    factory = InferenceFactory(config)
-    model_inference_instance = factory.get_inference_instance()
-    extractor = VLLMExtractor()
+        # Initialize the extractor and inference instance
+        factory = InferenceFactory(config)
+        model_inference_instance = factory.get_inference_instance()
+        extractor = VLLMExtractor()
 
-    # Run inference
-    llm_output, num_pages = extractor.run_inference(
-        model_inference_instance,
-        input_data,
-        tables_only=tables_only,
-        generic_query=query_all_data,
-        crop_size=crop_size,
-        debug_dir=debug_dir,
-        apply_annotation=apply_annotation,
-        precision_callback=precision_callback,
-        debug=debug,
-        mode=None
-    )
+        # Run inference
+        llm_output, num_pages = extractor.run_inference(
+            model_inference_instance,
+            input_data,
+            tables_only=tables_only,
+            generic_query=query_all_data,
+            crop_size=crop_size,
+            debug_dir=debug_dir,
+            apply_annotation=apply_annotation,
+            precision_callback=precision_callback,
+            debug=debug,
+            mode=None
+        )
 
-    # Return results
-    return llm_output, num_pages
+        # Return results
+        return llm_output, num_pages
 
 
 class SparrowParsePipeline(Pipeline):
@@ -317,6 +349,34 @@ class SparrowParsePipeline(Pipeline):
             return {
                 "method": method,
                 "model_name": options[1]
+            }, tables_only, validation_off, apply_annotation
+        elif method == 'openai':
+            # OpenAI adapter: options[1] is model name (e.g., gpt-4o)
+            return {
+                "method": method,
+                "model_name": options[1],
+                "openai_key": os.getenv('OPENAI_API_KEY')
+            }, tables_only, validation_off, apply_annotation
+        elif method == 'hfapi':
+            # HF Inference API adapter: options[1] is model identifier
+            return {
+                "method": method,
+                "model_name": options[1],
+                "hf_token": os.getenv('HF_API_KEY') or os.getenv('HF_TOKEN')
+            }, tables_only, validation_off, apply_annotation
+        elif method == 'hf_local':
+            # HF Local adapter: options[1] is model name
+            return {
+                "method": method,
+                "model_name": options[1],
+                "device": "cpu"  # Could be extended to support GPU via additional options
+            }, tables_only, validation_off, apply_annotation
+        elif method == 'llamacpp':
+            # llama.cpp adapter: options[1] is model path
+            return {
+                "method": method,
+                "model_name": options[1],  # model_path in this case
+                "n_ctx": 2048
             }, tables_only, validation_off, apply_annotation
         else:
             # Extendable for additional backends
