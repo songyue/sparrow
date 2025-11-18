@@ -54,6 +54,13 @@ class OpenAIAdapter(ModelAdapter):
         self.base_url = base_url or "https://api.openai.com/v1/chat/completions"
 
     def generate(self, prompt: str, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # Validate prompt
+        if prompt is None or (isinstance(prompt, str) and not prompt.strip()):
+            raise ValueError(
+                "OpenAI adapter requires a non-empty prompt. "
+                "Please provide a text query instead of using '*' (query all data)."
+            )
+        
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         payload = {
             "model": self.model,
@@ -61,8 +68,26 @@ class OpenAIAdapter(ModelAdapter):
             "max_tokens": 1024,
             "temperature": 0
         }
-        r = requests.post(self.base_url, json=payload, headers=headers, timeout=60)
-        r.raise_for_status()
+        
+        try:
+            r = requests.post(self.base_url, json=payload, headers=headers, timeout=60)
+            r.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            # Try to extract error message from response
+            error_detail = ""
+            try:
+                error_json = r.json()
+                if "error" in error_json:
+                    if isinstance(error_json["error"], dict) and "message" in error_json["error"]:
+                        error_detail = f" - {error_json['error']['message']}"
+                    else:
+                        error_detail = f" - {error_json['error']}"
+                else:
+                    error_detail = f" - {json.dumps(error_json)}"
+            except:
+                error_detail = f" - {r.text[:200]}"
+            raise RuntimeError(f"OpenAI API request failed: {e}{error_detail}") from e
+        
         j = r.json()
         # Try to extract text in common structures
         if "choices" in j and len(j["choices"]) > 0:
@@ -83,10 +108,32 @@ class HFInferenceAPIAdapter(ModelAdapter):
         self.endpoint = f"https://api-inference.huggingface.co/models/{model}"
 
     def generate(self, prompt: str, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # Validate prompt
+        if prompt is None or (isinstance(prompt, str) and not prompt.strip()):
+            raise ValueError(
+                "Hugging Face Inference API adapter requires a non-empty prompt. "
+                "Please provide a text query instead of using '*' (query all data)."
+            )
+        
         headers = {"Authorization": f"Bearer {self.hf_token}"}
         payload = {"inputs": prompt}
-        r = requests.post(self.endpoint, json=payload, headers=headers, timeout=120)
-        r.raise_for_status()
+        
+        try:
+            r = requests.post(self.endpoint, json=payload, headers=headers, timeout=120)
+            r.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            # Try to extract error message from response
+            error_detail = ""
+            try:
+                error_json = r.json()
+                if "error" in error_json:
+                    error_detail = f" - {error_json['error']}"
+                else:
+                    error_detail = f" - {json.dumps(error_json)}"
+            except:
+                error_detail = f" - {r.text[:200]}"
+            raise RuntimeError(f"Hugging Face API request failed: {e}{error_detail}") from e
+        
         j = r.json()
         # HF inference might return plain text or structured output
         if isinstance(j, dict) and "error" in j:
@@ -153,6 +200,14 @@ class QwenAdapter(ModelAdapter):
         self.base_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
 
     def generate(self, prompt: str, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # Validate prompt
+        if prompt is None or (isinstance(prompt, str) and not prompt.strip()):
+            raise ValueError(
+                "Qwen adapter requires a non-empty prompt. "
+                "The adapter does not support document/image inputs directly. "
+                "Please provide a text query instead of using '*' (query all data)."
+            )
+        
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -171,8 +226,25 @@ class QwenAdapter(ModelAdapter):
                 "result_format": "message"
             }
         }
-        r = requests.post(self.base_url, json=payload, headers=headers, timeout=60)
-        r.raise_for_status()
+        
+        try:
+            r = requests.post(self.base_url, json=payload, headers=headers, timeout=60)
+            r.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            # Try to extract error message from response
+            error_detail = ""
+            try:
+                error_json = r.json()
+                if "message" in error_json:
+                    error_detail = f" - {error_json['message']}"
+                elif "error" in error_json:
+                    error_detail = f" - {error_json['error']}"
+                else:
+                    error_detail = f" - {json.dumps(error_json)}"
+            except:
+                error_detail = f" - {r.text[:200]}"
+            raise RuntimeError(f"Qwen API request failed: {e}{error_detail}") from e
+        
         j = r.json()
         
         # DashScope API response format
@@ -202,6 +274,13 @@ class DeepSeekAdapter(ModelAdapter):
         self.base_url = base_url or "https://api.deepseek.com/v1/chat/completions"
 
     def generate(self, prompt: str, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # Validate prompt
+        if prompt is None or (isinstance(prompt, str) and not prompt.strip()):
+            raise ValueError(
+                "DeepSeek adapter requires a non-empty prompt. "
+                "Please provide a text query instead of using '*' (query all data)."
+            )
+        
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -217,8 +296,26 @@ class DeepSeekAdapter(ModelAdapter):
             "temperature": 0,
             "max_tokens": 1024
         }
-        r = requests.post(self.base_url, json=payload, headers=headers, timeout=60)
-        r.raise_for_status()
+        
+        try:
+            r = requests.post(self.base_url, json=payload, headers=headers, timeout=60)
+            r.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            # Try to extract error message from response
+            error_detail = ""
+            try:
+                error_json = r.json()
+                if "error" in error_json:
+                    if isinstance(error_json["error"], dict) and "message" in error_json["error"]:
+                        error_detail = f" - {error_json['error']['message']}"
+                    else:
+                        error_detail = f" - {error_json['error']}"
+                else:
+                    error_detail = f" - {json.dumps(error_json)}"
+            except:
+                error_detail = f" - {r.text[:200]}"
+            raise RuntimeError(f"DeepSeek API request failed: {e}{error_detail}") from e
+        
         j = r.json()
         
         # OpenAI-compatible response format
