@@ -3,6 +3,8 @@ import ollama
 import os
 import json
 import re
+import logging
+from datetime import datetime
 
 
 class OllamaInference(ModelInference):
@@ -19,6 +21,14 @@ class OllamaInference(ModelInference):
         """
         self.model_name = model_name
         print(f"Ollama initialized for model: {model_name}")
+        # Configure logging for network requests
+        self.logger = logging.getLogger(__name__)
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
         
         
     def process_response(self, output_text):
@@ -105,7 +115,14 @@ class OllamaInference(ModelInference):
         :param messages: Input messages
         :return: Generated response
         """
+        self.logger.info("=" * 80)
+        self.logger.info("Starting Ollama text inference")
+        self.logger.info(f"Model: {self.model_name}")
+        self.logger.info(f"Message length: {len(str(messages))} characters")
+        
         try:
+            self.logger.info("Sending request to Ollama...")
+            request_start = datetime.now()
             response = ollama.chat(
                 model=self.model_name,
                 messages=[
@@ -115,10 +132,15 @@ class OllamaInference(ModelInference):
                     }
                 ]
             )
-            print("Inference completed successfully")
+            request_time = (datetime.now() - request_start).total_seconds()
+            self.logger.info(f"Received response from Ollama (took {request_time:.2f}s)")
+            self.logger.info("Inference completed successfully")
+            self.logger.info("=" * 80)
             return self.process_response(response['message']['content'])
         except Exception as e:
-            print(f"Error during text inference: {e}")
+            self.logger.error(f"Error during text inference: {e}")
+            self.logger.error(f"Error type: {type(e).__name__}")
+            self.logger.error("=" * 80)
             raise
 
 
@@ -126,12 +148,19 @@ class OllamaInference(ModelInference):
         """
         Process images and generate responses for each.
         """
+        self.logger.info("=" * 80)
+        self.logger.info("Starting Ollama image inference")
+        self.logger.info(f"Model: {self.model_name}")
+        self.logger.info(f"Processing {len(file_paths)} image(s)")
+        
         results = []
-        for file_path in file_paths:
+        for idx, file_path in enumerate(file_paths, 1):
             try:
+                self.logger.info(f"Processing image {idx}/{len(file_paths)}: {file_path}")
+                
                 # Check if file exists
                 if not os.path.exists(file_path):
-                    print(f"Warning: File does not exist: {file_path}")
+                    self.logger.warning(f"File does not exist: {file_path}")
                     continue
 
                 # Prepare messages based on model type
@@ -157,22 +186,29 @@ class OllamaInference(ModelInference):
                     ]
 
                 # Make the multimodal request to Ollama
+                self.logger.info(f"Sending request to Ollama for image {idx}...")
+                request_start = datetime.now()
                 response = ollama.chat(
                     model=self.model_name,
                     messages=ollama_messages
                 )
+                request_time = (datetime.now() - request_start).total_seconds()
+                self.logger.info(f"Received response from Ollama (took {request_time:.2f}s)")
 
                 # Process the raw response
                 processed_response = self.process_response(response['message']['content'])
 
                 results.append(processed_response)
-                print(f"Inference completed successfully for: {file_path}")
+                self.logger.info(f"Inference completed successfully for: {file_path}")
 
             except Exception as e:
-                print(f"Error processing image {file_path}: {e}")
+                self.logger.error(f"Error processing image {file_path}: {e}")
+                self.logger.error(f"Error type: {type(e).__name__}")
                 # Continue processing other images instead of failing completely
                 continue
 
+        self.logger.info(f"Successfully processed {len(results)}/{len(file_paths)} image(s)")
+        self.logger.info("=" * 80)
         return results
 
 
