@@ -176,7 +176,8 @@ export HF_API_KEY="your-hf-token"
 ### Example 1: Invoice Extraction with Qwen
 
 ```bash
-./sparrow.sh '*' \
+# Extract specific fields using JSON schema
+./sparrow.sh '[{"invoice_number":"str","date":"str","total":"str"}]' \
   --pipeline "sparrow-parse" \
   --options qwen \
   --options qwen-max \
@@ -205,15 +206,15 @@ export HF_API_KEY="your-hf-token"
   --file-path "invoice.jpg"
 ```
 
-### Example 4: Multi-page Processing with DeepSeek
+### Example 4: Document Analysis with Qwen
 
 ```bash
-./sparrow.sh '*' \
+# Use specific query with validation
+./sparrow.sh '[{"company_name":"str","address":"str"}]' \
   --pipeline "sparrow-parse" \
-  --options deepseek \
-  --options deepseek-chat \
-  --file-path "multi_page_report.pdf" \
-  --debug-dir "debug/"
+  --options qwen \
+  --options qwen-plus \
+  --file-path "document.pdf"
 ```
 
 ## Troubleshooting
@@ -226,13 +227,29 @@ RuntimeError: DASHSCOPE_API_KEY not set in environment
 ```
 **Solution**: Make sure to set the appropriate environment variable before running.
 
-**2. Rate Limiting**
+**2. Empty Prompt Error**
+```
+ValueError: Qwen adapter requires a non-empty prompt. The adapter does not support document/image inputs directly.
+```
+**Solution**: The text-based adapters (Qwen, OpenAI, DeepSeek, HFInferenceAPI) do not support the `*` (query all data) option as they require explicit text prompts. Use a specific JSON schema query or instruction instead:
+```bash
+# ❌ This will fail with text-based adapters
+./sparrow.sh '*' --pipeline "sparrow-parse" --options qwen --options qwen-plus --file-path "doc.pdf"
+
+# ✅ Use a specific query instead
+./sparrow.sh '[{"field":"str"}]' --pipeline "sparrow-parse" --options qwen --options qwen-plus --file-path "doc.pdf"
+
+# ✅ Or use an instruction query
+./sparrow.sh "extract invoice details" --pipeline "sparrow-parse" --instruction --options qwen --options qwen-plus --file-path "doc.pdf"
+```
+
+**3. Rate Limiting**
 Both Qwen and DeepSeek have rate limits. If you encounter rate limit errors, consider:
 - Adding delays between requests
 - Upgrading your API plan
 - Implementing retry logic with exponential backoff
 
-**3. Request Timeout**
+**4. Request Timeout**
 The default timeout is 60 seconds. For large documents or complex queries, you may need to increase this in the adapter code.
 
 ## Notes
@@ -241,6 +258,7 @@ The default timeout is 60 seconds. For large documents or complex queries, you m
 - **DeepSeek Adapter**: Uses OpenAI-compatible API format for easy migration
 - Both adapters support JSON-formatted responses for structured data extraction
 - The adapters are designed to work seamlessly with Sparrow's existing pipeline infrastructure
+- **Important**: Text-based adapters (Qwen, OpenAI, DeepSeek, HFInferenceAPI) do not support vision/document inputs and require explicit text prompts. Use MLX, Hugging Face, or Ollama backends for document vision capabilities.
 
 ## Support
 
