@@ -577,6 +577,44 @@ The stock price of the Oracle Corporation is 186.3699951171875. USD
   --options lmstudio-community/Mistral-Small-3.2-24B-Instruct-2506-8bit
 ```
 
+#### Cloud API Adapters
+
+Sparrow now supports cloud-based LLM APIs for flexible deployment options:
+
+```bash
+# Alibaba Qwen (阿里千问) - DashScope API
+# Set environment variable: export DASHSCOPE_API_KEY="your-key"
+./sparrow.sh '[{"field":"str"}]' \
+  --pipeline "sparrow-parse" \
+  --options qwen \
+  --options qwen-plus \
+  --file-path "document.pdf"
+
+# DeepSeek API
+# Set environment variable: export DEEPSEEK_API_KEY="your-key"
+./sparrow.sh '[{"field":"str"}]' \
+  --pipeline "sparrow-parse" \
+  --options deepseek \
+  --options deepseek-chat \
+  --file-path "document.pdf"
+
+# OpenAI API
+# Set environment variable: export OPENAI_API_KEY="your-key"
+./sparrow.sh '[{"field":"str"}]' \
+  --pipeline "sparrow-parse" \
+  --options openai \
+  --options gpt-4o \
+  --file-path "document.pdf"
+```
+
+**Supported Cloud Adapters:**
+- `qwen` - Alibaba Qwen (models: qwen-turbo, qwen-plus, qwen-max)
+- `deepseek` - DeepSeek (models: deepseek-chat, deepseek-coder)
+- `openai` - OpenAI (models: gpt-4o, gpt-4-turbo, gpt-3.5-turbo)
+- `hfapi` - Hugging Face Inference API
+
+📖 **For detailed adapter usage, see [ADAPTER_USAGE.md](sparrow-ml/llm/ADAPTER_USAGE.md)**
+
 ### Advanced Examples
 
 ```bash
