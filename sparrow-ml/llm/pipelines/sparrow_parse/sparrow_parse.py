@@ -40,10 +40,10 @@ def subprocess_inference(config, input_data, tables_only, crop_size, query_all_d
     """
     Subprocess function to execute the inference logic.
     Supports both traditional inference backends (MLX, Hugging Face, Ollama) 
-    and new adapter-based backends (OpenAI, HF API, HF Local, llama.cpp).
+    and new adapter-based backends (OpenAI, HF API, HF Local, llama.cpp, Qwen, DeepSeek).
     """
     # Check if this is an adapter-based method
-    adapter_methods = ["openai", "hfapi", "hf_local", "llamacpp"]
+    adapter_methods = ["openai", "hfapi", "hf_local", "llamacpp", "qwen", "deepseek"]
     method = config.get("method", "").lower()
     
     if method in adapter_methods:
@@ -377,6 +377,20 @@ class SparrowParsePipeline(Pipeline):
                 "method": method,
                 "model_name": options[1],  # model_path in this case
                 "n_ctx": 2048
+            }, tables_only, validation_off, apply_annotation
+        elif method == 'qwen':
+            # Alibaba Qwen (DashScope) adapter: options[1] is model name (e.g., qwen-turbo, qwen-plus, qwen-max)
+            return {
+                "method": method,
+                "model_name": options[1],
+                "qwen_api_key": os.getenv('DASHSCOPE_API_KEY') or os.getenv('QWEN_API_KEY')
+            }, tables_only, validation_off, apply_annotation
+        elif method == 'deepseek':
+            # DeepSeek adapter: options[1] is model name (e.g., deepseek-chat, deepseek-coder)
+            return {
+                "method": method,
+                "model_name": options[1],
+                "deepseek_api_key": os.getenv('DEEPSEEK_API_KEY')
             }, tables_only, validation_off, apply_annotation
         else:
             # Extendable for additional backends

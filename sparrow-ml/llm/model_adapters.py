@@ -1,5 +1,5 @@
 # New file: model_adapters.py
-# Lightweight adapter layer to allow using different LLM backends (OpenAI, HF Inference API, local transformers, llama.cpp).
+# Lightweight adapter layer to allow using different LLM backends (OpenAI, HF Inference API, local transformers, llama.cpp, Qwen, DeepSeek).
 # Designed to be called from pipelines (e.g. sparrow_parse) with a config dict or option string.
 import os
 import json
@@ -114,6 +114,98 @@ class LlamaCppAdapter(ModelAdapter):
         return {"text": text, "raw": r}
 
 
+class QwenAdapter(ModelAdapter):
+    """
+    Adapter for Alibaba Qwen (DashScope API).
+    Requires DASHSCOPE_API_KEY environment variable to be set.
+    """
+    def __init__(self, model: str, api_key: Optional[str] = None):
+        if requests is None:
+            raise RuntimeError("requests is required for QwenAdapter. Install requests.")
+        self.model = model
+        self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("DASHSCOPE_API_KEY or QWEN_API_KEY not set in environment")
+        self.base_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+
+    def generate(self, prompt: str, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": self.model,
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            },
+            "parameters": {
+                "result_format": "message"
+            }
+        }
+        r = requests.post(self.base_url, json=payload, headers=headers, timeout=60)
+        r.raise_for_status()
+        j = r.json()
+        
+        # DashScope API response format
+        if "output" in j and "choices" in j["output"] and len(j["output"]["choices"]) > 0:
+            content = j["output"]["choices"][0].get("message", {}).get("content", "")
+        elif "output" in j and "text" in j["output"]:
+            content = j["output"]["text"]
+        else:
+            content = json.dumps(j)
+        
+        return {"text": content, "raw": j}
+
+
+class DeepSeekAdapter(ModelAdapter):
+    """
+    Adapter for DeepSeek API.
+    DeepSeek uses an OpenAI-compatible API format.
+    Requires DEEPSEEK_API_KEY environment variable to be set.
+    """
+    def __init__(self, model: str, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        if requests is None:
+            raise RuntimeError("requests is required for DeepSeekAdapter. Install requests.")
+        self.model = model
+        self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("DEEPSEEK_API_KEY not set in environment")
+        self.base_url = base_url or "https://api.deepseek.com/v1/chat/completions"
+
+    def generate(self, prompt: str, inputs: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0,
+            "max_tokens": 1024
+        }
+        r = requests.post(self.base_url, json=payload, headers=headers, timeout=60)
+        r.raise_for_status()
+        j = r.json()
+        
+        # OpenAI-compatible response format
+        if "choices" in j and len(j["choices"]) > 0:
+            content = j["choices"][0].get("message", {}).get("content") or j["choices"][0].get("text", "")
+        else:
+            content = json.dumps(j)
+        
+        return {"text": content, "raw": j}
+
+
 def get_adapter(option_or_config: Any) -> ModelAdapter:
     """
     Accepts either:
@@ -137,6 +229,10 @@ def get_adapter(option_or_config: Any) -> ModelAdapter:
             return HFLocalAdapter(model=model, device=device)
         if method.lower() == "llamacpp":
             return LlamaCppAdapter(model_path=model, n_ctx=cfg.get("n_ctx", 2048))
+        if method.lower() == "qwen":
+            return QwenAdapter(model=model, api_key=cfg.get("qwen_api_key") or cfg.get("dashscope_api_key"))
+        if method.lower() == "deepseek":
+            return DeepSeekAdapter(model=model, api_key=cfg.get("deepseek_api_key"), base_url=cfg.get("base_url"))
         # Fallback: try to interpret 'method' as huggingface/local
         raise ValueError(f"Unknown adapter method: {method}")
 
@@ -152,4 +248,8 @@ def get_adapter(option_or_config: Any) -> ModelAdapter:
                 return HFLocalAdapter(model=val)
             if prefix in ("llamacpp", "llama"):
                 return LlamaCppAdapter(model_path=val)
-        raise ValueError("Unknown option string format. Use openai:<model>, hfapi:<model>, hf:<model>, llamacpp:<path>.")
+            if prefix == "qwen":
+                return QwenAdapter(model=val)
+            if prefix == "deepseek":
+                return DeepSeekAdapter(model=val)
+        raise ValueError("Unknown option string format. Use openai:<model>, hfapi:<model>, hf:<model>, llamacpp:<path>, qwen:<model>, deepseek:<model>.")
